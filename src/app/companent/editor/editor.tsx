@@ -6,6 +6,16 @@ import { Editor } from "@tinymce/tinymce-react";
 const TinyMCEEditor = () => {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverImage(file);
+      setPreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleSave = async () => {
     if (!title.trim() || !content.trim()) {
@@ -13,19 +23,31 @@ const TinyMCEEditor = () => {
       return;
     }
 
+    const formData = new FormData();
+    formData.append("title", title);
+    formData.append("content", content);
+    if (coverImage) {
+      formData.append("coverImage", coverImage);
+    }
+
     try {
+      fetch("/api/pst/post", { method: "POST", body: formData });
       const response = await fetch("/api/pst/post", {
+
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content }),
+        body: formData,
       });
+
+      const result = await response.json();
 
       if (response.ok) {
         alert("Başarıyla kaydedildi!");
         setTitle("");
         setContent("");
+        setCoverImage(null);
+        setPreview("");
       } else {
-        alert("Kayıt başarısız!");
+        alert(`Hata: ${result.error}`);
       }
     } catch (error) {
       console.error("Hata:", error);
@@ -44,9 +66,13 @@ const TinyMCEEditor = () => {
         className="w-full p-2 border border-gray-300 rounded mb-3"
       />
 
+      {/* Kapak Resmi Yükleme */}
+      <input type="file" accept="image/*" onChange={handleImageChange} className="mb-3" />
+      {preview && <img src={preview} alt="Kapak Resmi" className="mb-3 w-full h-48 object-cover rounded" />}
+
       {/* TinyMCE Editör */}
       <Editor
-        apiKey="your-api-key"  
+        apiKey="nvjiyfnc9gle051eoekjdgige6gnrnj23vp6gwlfg7nkr01g"
         value={content}
         onEditorChange={(newContent) => setContent(newContent)}
         init={{
