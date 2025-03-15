@@ -1,62 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDBConnection } from "@/lib/db";
-import fs from "fs/promises";
-import path from "path";
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
 
 export async function POST(req: NextRequest) {
-  try {
-    const formData = await req.formData();
-    
-    const title = formData.get('title') as string;
-    const content = formData.get('content') as string;
-    const coverImage = formData.get('coverImage') as File | null;
+    try {
+        const contentType = req.headers.get("content-type");
+        let title: string, content: string, coverImage: string | null = null;
+        let authorId: number = 1; // 🛠️ Varsayılan olarak 1 yapıldı
 
-    if (!title?.trim() || !content?.trim()) {
-      return NextResponse.json(
-        { success: false, error: "Başlık ve içerik gerekli" }, 
-        { status: 400 }
-      );
+        if (contentType?.includes("multipart/form-data")) {
+            // 🖼️ FormData ile Dosya Yükleme
+            const formData = await req.formData();
+            title = formData.get("title") as string;
+            content = formData.get("content") as string;
+            const file = formData.get("coverImage") as File | null;
+
+            if (file) {
+                coverImage = `/uploads/${file.name}`;
+            }
+        } else {
+            // 📜 JSON formatında POST isteği
+            const body = await req.json();
+            title = body.title;
+            content = body.content;
+            coverImage = body.coverImage || null;
+        }
+
+        // 🚀 MySQL'e ekleme (HATA DÜZELTİLDİ: `author_id` artık varsayılan olarak 1)
+        const db = await getDBConnection();
+        await db.execute(
+            "INSERT INTO posts (title, content, cover_image, author_id) VALUES (?, ?, ?, ?)",
+            [title, content, coverImage, authorId]
+        );
+
+        db.end();
+        return NextResponse.json({ success: true, message: "Post başarıyla eklendi!" });
+    } catch (error) {
+        console.error("Gönderi ekleme hatası:", error);
+        return NextResponse.json({ error: "Post eklenirken hata oluştu" }, { status: 500 });
     }
-
-    let imagePath = null;
-    if (coverImage) {
-      const bytes = await coverImage.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      
-      const newFileName = `${Date.now()}_${coverImage.name}`;
-      const uploadDir = path.join(process.cwd(), "public/uploads");
-      
-      await fs.mkdir(uploadDir, { recursive: true });
-      
-      const newPath = path.join(uploadDir, newFileName);
-      await fs.writeFile(newPath, buffer);
-      imagePath = `/uploads/${newFileName}`;
-    }
-
-    const db = await getDBConnection();
-    await db.execute(
-      "INSERT INTO posts (title, content, img) VALUES (?, ?, ?)",
-      [title, content, imagePath]
-    );
-    await db.end();
-
-    return NextResponse.json({
-      success: true,
-      message: "Gönderi eklendi",
-      imagePath
-    });
-
-  } catch (error) {
-    console.error("Gönderi ekleme hatası:", error);
-    return NextResponse.json(
-      { success: false, error: "Gönderi ekleme hatası" },
-      { status: 500 }
-    );
-  }
 }
